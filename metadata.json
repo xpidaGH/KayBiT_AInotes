@@ -1,0 +1,6 @@
+{
+  "name": "AInotes",
+  "description": "Multi-platform AI handwriting recognition, 20-language code parser, 26-language i18n workspace, TTS audio study studio, and structured multilingual PDF exporter for computer science students.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

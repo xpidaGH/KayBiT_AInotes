@@ -1,0 +1,281 @@
+For my 20 programming languages (Python, JavaScript, TypeScript, Java, C#, Kotlin, Dart/Flutter, Bash/Shell, Rust, Go, C++, C, PHP, Ruby, PowerShell, SQL, R, Scala, MATLAB, COBOL/Assembly) advanced computer science students' practical, build a multi-platform app, AInotes, that implement Handwriting recognition inspired by software such as MyScript Notes: (turns handwriting into digital text, and includes AI study tools like note summaries and quizzes), Pen to Print: (Converts scanned handwritten notes, images, and PDFs — including neat, cursive, or messy writing — into editable digital text), Transkribus: (offering public AI models across many languages as well as custom model training), InkReadable: (AI-based handwriting and cursive recognition solution for extracting data from scanned handwritten and printed documents), Google Document AI & AWS Textract: (to extract handwritten and printed text from forms, checks, and records at scale), Everyday Built-In Options: (Google Keep, Apple Live Text, and Microsoft OneNote for quick photo-to-text capture and basic handwritten notes. It supports 26 Internationalization languages: English (en), French (fr), German (de), Italian (it), Spanish (es), Portuguese (pt), Indonesian (id), Swahili (sw), Amharic (am), Hausa (ha), Turkish (tr), Russian (ru), Chinese (zh), Japanese (ja), Korean (ko), Arabic (ar), Urdu (ur), Farsi/Persian (fa), Western Punjabi (pa-PK), Tagalog/Filipino (tl), Vietnamese (vi), Hindi (hi), Marathi (mr), Bangla/Bengali (bn), Tamil (ta), and Telugu (te). Generate a comprehensive User Guide and add a 'User Guide' button to the splash screen to load the USER_GUIDE.md in a scrollable modal on button-click. Translate the User Guide into the Internationalization languages and make them available via a dropdown to enhance the user experience of international students. Create a comprehensive README file. Allow upload/pasting of .txt .md .mdx etc. documents to be included in the Notes. Include structured PDF generation and optimize the .pdf creation for .txt .md .mdx etc. outputs. Implement TTS using the native window.speechSynthesis API that matches the closest available system voice for all 26 languages and handles cross-browser playback available in modern browsers and mobile webviews to speak text, pause, and stop playback (explicit background audio permissions enabled) in the selected language. To provide direct download link on my websites for students to install this app natively across applicable devices (Android APK/AAB, iOS guidelines/PWA, Windows .exe/.msi, and macOS .dmg), provide a complete, step-by-step implementation guide (INSTALLATION.md). 
+
+To build AInotes app for advanced computer science students across 20 programming languages and 26 international languages, structure the application around a modular Local-First + Cloud-Hybrid architecture. This allows offline stylus/camera capture on mobile and desktop while offloading heavy HTR (Handwritten Text Recognition), custom model training, and multilingual PDF rendering to scalable cloud workers.
+
+1. System Architecture & Multi-Platform Stack
+
+Layer	Technology Stack	Purpose
+Mobile & Desktop UI	Flutter (Dart) or React Native + Electron/Tauri	Single codebase for iOS, Android, Windows, and macOS with native stylus/Apple Pencil/S-Pen low-latency ink capture.
+Local Storage & Search	SQLite (with FTS5) + IndexedDB / LocalStorage	Stores offline notes, custom keyboard shortcut bindings, and powers instant full-text global search.
+HTR & OCR Engine	Hybrid Pipeline: Apple Vision / ML Kit (on-device quick capture) + TrOCR / Kraken / Google Document AI / AWS Textract (cloud batch & cursive/historical).	Handles neat print, messy cursive, mathematical notation, and code syntax recognition.
+Custom Model Training	PyTorch + HuggingFace (TrOCR fine-tuning) via AWS SageMaker / GCP Vertex AI	Lets students train custom HTR weights on their own handwriting datasets (inspired by Transkribus).
+Code & Markup Parser	Tree-sitter + Custom Lightweight Markup AST Parser	Parses custom underline headings (***, ===, ---), 3-space indented code blocks, and syntax-highlights all 20 supported languages.
+Multilingual PDF Engine	Typst or WeasyPrint / HarfBuzz + Noto Fonts	Ensures complex shaping (Arabic, Urdu, Persian, Punjabi, Devanagari, Bengali, Tamil, Telugu, CJK) renders cleanly without broken ligatures.
+
+
+2. Recommended Repository Structure
+
+ainotes/
+├── README.md                        # Comprehensive developer & deployment guide
+├── docs/
+│   └── user-guides/                 # 26 localized Markdown user guides
+│       ├── USER_GUIDE.en.md
+│       ├── USER_GUIDE.fr.md
+│       └── ... (all 26 language ISO codes)
+├── apps/
+│   ├── client/                      # Multi-platform Flutter / Tauri+React app
+│   │   ├── src/
+│   │   │   ├── components/
+│   │   │   │   ├── SplashModal.tsx          # Splash screen + 'User Guide' button + 26-lang dropdown
+│   │   │   │   ├── KeyboardShortcuts.tsx    # Rebindable shortcut manager (persisted to localStorage)
+│   │   │   │   ├── GlobalSearch.tsx         # Instant FTS5 / Lunr search across notes & code blocks
+│   │   │   │   └── LanguageSelector.tsx     # 26-language UI & OCR target selector
+│   │   │   ├── parsers/
+│   │   │   │   ├── setextCustomParser.ts    # Parses *, =, - underlines & 3-space code blocks
+│   │   │   │   └── fileIngestor.ts          # Handles .txt, .md, .mdx, .pdf, image uploads
+│   │   │   └── services/
+│   │   │       └── pdfExporter.ts           # HarfBuzz/Noto-backed multilingual PDF generator
+├── services/
+│   ├── htr-pipeline/                # Python FastAPI service wrapping TrOCR, Document AI, Textract
+│   ├── model-trainer/               # Fine-tuning worker for custom student handwriting models
+│   └── study-ai/                    # LLM RAG pipeline for code explanations, summaries, & quizzes
+└── docker-compose.yml
+
+
+3. Core Technical Specifications
+
+
+A. Custom Lightweight Markup & 20-Language Code Parser
+
+Your custom parser runs before Markdown/MDX rendering to normalize student notes and handwritten transcriptions into structured Abstract Syntax Tree (AST) blocks:
+• Title (***): Any line followed immediately by ^\*{3,}$ becomes an <h1> Document Title.
+• Section (===): Any line followed immediately by ^={3,}$ becomes an <h2> Section Heading.
+• Subsection (---): Any line followed immediately by ^-{3,}$ becomes an <h3> Subsection Heading.
+• Indented Code Blocks (   ): Consecutive lines prefixed by 3 spaces (^ {3}(.*)$) are grouped into a fenced code block. An automatic language classifier (using token heuristics or Tree-sitter) tags the block among the 20 supported languages (Python, JavaScript, TypeScript, Java, C#, Kotlin, Dart/Flutter, Bash/Shell, Rust, Go, C++, C, PHP, Ruby, PowerShell, SQL, R, Scala, MATLAB, COBOL/Assembly).
+
+B. Internationalization (26 Languages) & PDF Optimization
+
+• Supported Languages (i18n & OCR): English (en), French (fr), German (de), Italian (it), Spanish (es), Portuguese (pt), Indonesian (id), Swahili (sw), Amharic (am), Hausa (ha), Turkish (tr), Russian (ru), Chinese (zh), Japanese (ja), Korean (ko), Arabic (ar), Urdu (ur), Farsi/Persian (fa), Western Punjabi (pa-PK), Tagalog/Filipino (tl), Vietnamese (vi), Hindi (hi), Marathi (mr), Bangla/Bengali (bn), Tamil (ta), and Telugu (te).
+• RTL & Complex Script Handling: Automatically flips dir="rtl" for Arabic, Urdu, Farsi, and Shahmukhi Punjabi.
+• PDF Export Pipeline: Embeds subsetted Google Noto Sans / Noto Serif / Noto Naskh / Noto Sans CJK / Noto Sans Ethiopic fonts via Typst or ReportLab + HarfBuzz so right-to-left scripts, Devanagari conjuncts, and code blocks export with crisp vector typography.
+
+C. Splash Screen & Localized User Guide Modal
+
+• On launch, the Splash Screen displays quick-start actions alongside a prominent User Guide button.
+• Clicking User Guide opens a scrollable modal containing a 26-Language Dropdown at the top right. Selecting a language dynamically fetches and renders docs/user-guides/USER_GUIDE.<lang>.md with automatic RTL/LTR layout switching.
+
+D. Rebindable Keyboard Shortcuts & Global Search
+
+• Keyboard Shortcuts Component: Reads default keymaps from defaultKeybindings.json, merges user overrides from localStorage.getItem('ainotes_keybindings'), listens for key combinations in a capture modal, prevents duplicate conflicts, and persists updates immediately.
+• Global Search: Indexes all transcribed notes, uploaded .txt/.md/.mdx files, and extracted code tokens using SQLite FTS5 (desktop/mobile) or FlexSearch (web) for sub-50ms filtering by language, tag, or code snippet.
+
+4. Starter Implementation Modules
+
+
+README.md (Project Overview & Setup)
+
+markdown
+# AInotes — Multi-Platform AI Handwriting & Code Recognition Platform
+
+AInotes converts handwritten lecture notes, whiteboard photos, and scanned PDFs into structured, syntax-highlighted digital notes and interactive study materials across **iOS, Android, Windows, macOS, and Cloud Workflows**.
+
+## Key Features
+- **Hybrid HTR/OCR Engine**: Combines on-device recognition (Apple Live Text / ML Kit) with cloud pipelines (Google Document AI, AWS Textract, and fine-tunable TrOCR models).
+- **20 Programming Languages**: Built-in syntax detection and formatting for Python, JS, TS, Java, C#, Kotlin, Dart, Bash, Rust, Go, C++, C, PHP, Ruby, PowerShell, SQL, R, Scala, MATLAB, and COBOL/Assembly.
+- **26 International Languages**: Full UI localization, HTR recognition, localized User Guides, and HarfBuzz/Noto-optimized PDF generation.
+- **Custom Lightweight Markup**: Supports `*`, `=`, `-` underline headings and 3-space indented code blocks alongside `.txt`, `.md`, and `.mdx` uploads.
+- **AI Study Suite**: Generates code walkthroughs, flashcards, quizzes, and concise summaries from handwritten pages.
+
+## Quick Start
+1. **Clone & Install**:
+   ```bash
+   git clone https://github.com && cd ainotes
+   docker-compose up -d
+   ```
+2. **Configure Cloud Credentials** (`.env`):
+   ```env
+   GOOGLE_APPLICATION_CREDENTIALS=./keys/gcp-docai.json
+   AWS_ACCESS_KEY_ID=your_key
+   AWS_SECRET_ACCESS_KEY=your_secret
+   ```
+3. **Run Client**:
+   ```bash
+   cd apps/client && npm install && npm run dev
+
+Example: Custom Lightweight Markup Parser (setextCustomParser.ts)
+
+typescript
+export function parseCustomLightweightMarkup(raw: string): string {
+  const lines = raw.replace(/\r\n/g, '\n').split('\n');
+  const output: string[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const current = lines[i];
+    const next = lines[i + 1] ?? '';
+
+    if (current.trim().length > 0 && /^\*{3,}$/.test(next.trim())) {
+      output.push(`# ${current.trim()}`);
+      i += 2;
+      continue;
+    }
+    if (current.trim().length > 0 && /^={3,}$/.test(next.trim())) {
+      output.push(`## ${current.trim()}`);
+      i += 2;
+      continue;
+    }
+    if (current.trim().length > 0 && /^-{3,}$/.test(next.trim())) {
+      output.push(`### ${current.trim()}`);
+      i += 2;
+      continue;
+    }
+    if (/^ {3}\S/.test(current) || (current.startsWith('   ') && current.trim() !== '')) {
+      const codeLines: string[] = [];
+      while (i < lines.length && (lines[i].startsWith('   ') || lines[i].trim() === '')) {
+        codeLines.push(lines[i].startsWith('   ') ? lines[i].slice(3) : '');
+        i++;
+      }
+      output.push('```auto\n' + codeLines.join('\n').trimEnd() + '\n```');
+      continue;
+    }
+
+    output.push(current);
+    i++;
+  }
+
+  return output.join('\n');
+}
+
+
+Example: Rebindable Keyboard Shortcuts Component (KeyboardShortcuts.tsx)
+
+tsx
+import React, { useState, useEffect } from 'react';
+
+export interface ShortcutItem {
+  id: string;
+  action: string;
+  keys: string;
+}
+
+const DEFAULT_SHORTCUTS: ShortcutItem[] = [
+  { id: 'global-search', action: 'Open Global Search', keys: 'Ctrl+K' },
+  { id: 'scan-capture', action: 'Scan / Upload Handwriting', keys: 'Ctrl+Shift+U' },
+  { id: 'export-pdf', action: 'Export Multilingual PDF', keys: 'Ctrl+E' },
+  { id: 'ai-quiz', action: 'Generate Study Quiz', keys: 'Ctrl+Alt+Q' },
+  { id: 'user-guide', action: 'Open User Guide Modal', keys: 'F1' },
+];
+
+export const KeyboardShortcuts: React.FC = () => {
+  const [shortcuts, setShortcuts] = useState<ShortcutItem[]>(() => {
+    const saved = localStorage.getItem('ainotes_shortcuts');
+    return saved ? JSON.parse(saved) : DEFAULT_SHORTCUTS;
+  });
+  const [recordingId, setRecordingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    localStorage.setItem('ainotes_shortcuts', JSON.stringify(shortcuts));
+  }, [shortcuts]);
+
+  const handleKeyDown = (e: React.KeyboardEvent, id: string) => {
+    e.preventDefault();
+    const parts: string[] = [];
+    if (e.ctrlKey) parts.push('Ctrl');
+    if (e.metaKey) parts.push('Cmd');
+    if (e.altKey) parts.push('Alt');
+    if (e.shiftKey) parts.push('Shift');
+    if (!['Control', 'Meta', 'Alt', 'Shift'].includes(e.key)) {
+      parts.push(e.key.length === 1 ? e.key.toUpperCase() : e.key);
+      const combo = parts.join('+');
+      setShortcuts((prev) =>
+        prev.map((item) => (item.id === id ? { ...item, keys: combo } : item))
+      );
+      setRecordingId(null);
+    }
+  };
+
+  return (
+    <div className="p-4 border rounded-lg max-w-xl">
+      <div className="flex justify-between items-center mb-3">
+        <h3 className="text-lg font-semibold">Keyboard Shortcuts</h3>
+        <button
+          onClick={() => setShortcuts(DEFAULT_SHORTCUTS)}
+          className="text-sm underline"
+        >
+          Reset Defaults
+        </button>
+      </div>
+      <ul className="divide-y">
+        {shortcuts.map((sc) => (
+          <li key={sc.id} className="py-2 flex justify-between items-center">
+            <span>{sc.action}</span>
+            {recordingId === sc.id ? (
+              <input
+                autoFocus
+                readOnly
+                placeholder="Press keys..."
+                onKeyDown={(e) => handleKeyDown(e, sc.id)}
+                onBlur={() => setRecordingId(null)}
+                className="px-2 py-1 border rounded text-sm bg-yellow-50"
+              />
+            ) : (
+              <button
+                onClick={() => setRecordingId(sc.id)}
+                className="px-2 py-1 border rounded text-sm font-mono hover:bg-gray-100"
+              >
+                {sc.keys}
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+};
+
+
+5. Comprehensive User Guide (USER_GUIDE.en.md Template)
+
+markdown
+AInotes User Guide
+******************
+
+Welcome to AInotes
+==================
+AInotes bridges handwritten algorithms, whiteboard diagrams, and printed textbooks with an intelligent digital workspace built for computer science students.
+
+Capturing & Importing Notes
+---------------------------
+1. **Stylus & Camera Capture**: Open a new canvas on iOS, Android, Windows, or macOS to write with a stylus, or snap a photo of handwritten pages.
+2. **Batch Scans & Cloud Sync**: Drag and drop multi-page PDFs or images to process cursive and printed text via Google Document AI, AWS Textract, or custom TrOCR models.
+3. **File Uploads**: Import existing `.txt`, `.md`, or `.mdx` files directly into your workspace.
+
+Example: Lightweight Markup & Code Blocks
+--------------------------------
+AInotes automatically converts plain-text underline syntax into structured headings and syntax-highlighted code blocks across 20 programming languages:
+- Underline a document title with `***` (3 or more asterisks).
+- Underline a section heading with `===` (3 or more equals signs).
+- Underline a subsection heading with `---` (3 or more hyphens).
+- Indent code lines by **3 spaces** to create an auto-detected code block:
+
+   def binary_search(arr, target):
+       low, high = 0, len(arr) - 1
+       while low <= high:
+           mid = (low + high) // 2
+           if arr[mid] == target:
+               return mid
+           elif arr[mid] < target:
+               low = mid + 1
+           else:
+               high = mid - 1
+       return -1
+
+Multilingual Support & PDF Export
+---------------------------------
+Select any of the **26 supported languages** from the top navigation bar or Splash Screen User Guide dropdown. When exporting to `.pdf`, AInotes embeds Noto vector fonts with full Right-to-Left (RTL) and Indic script shaping.
+
+Global Search & Keyboard Shortcuts
+----------------------------------
+- Press **Ctrl+K** (or your custom binding) to search across handwritten transcriptions, uploaded Markdown files, and code blocks.
+- Open **Settings > Keyboard Shortcuts** to click any shortcut badge and rebind it to your preferred key combination.
+Build the Python FastAPI HTR + Typst multilingual PDF export service
