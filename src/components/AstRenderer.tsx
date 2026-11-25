@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Check, Copy, Sparkles, StickyNote } from 'lucide-react';
+import { Check, CheckSquare, Copy, Sparkles, Square, StickyNote } from 'lucide-react';
 import { AstBlock, parseToAst } from '../parsers/setextCustomParser';
 import { NoteAnnotation } from '../services/storageService';
 import { ANNOTATION_COLOR_STYLES } from '../services/codeAnnotations';
@@ -10,6 +10,10 @@ interface AstRendererProps {
   onExplainCode?: (code: string, language: string) => void;
   annotations?: NoteAnnotation[];
   onSelectAnnotation?: (annotationId: string) => void;
+  completedSections?: string[];
+  onToggleSectionComplete?: (sectionTitle: string) => void;
+  onToggleTask?: (taskIndex: number) => void;
+  isReadOnly?: boolean;
 }
 
 function renderInline(text: string): React.ReactNode[] {
@@ -154,6 +158,10 @@ export const AstRenderer: React.FC<AstRendererProps> = ({
   onExplainCode,
   annotations,
   onSelectAnnotation,
+  completedSections = [],
+  onToggleSectionComplete,
+  onToggleTask,
+  isReadOnly = false,
 }) => {
   const blocks: AstBlock[] = parseToAst(content);
 
@@ -164,6 +172,49 @@ export const AstRenderer: React.FC<AstRendererProps> = ({
       </p>
     );
   }
+
+  const completedSectionSet = new Set(
+    completedSections.map((s) => s.trim().toLowerCase())
+  );
+  let taskCursor = 0;
+
+  const renderListItems = (items: string[]) =>
+    items.map((item, li) => {
+      const taskMatch = item.match(/^\[([ xX])\]\s+(.*)$/);
+      if (taskMatch) {
+        const checked = taskMatch[1].toLowerCase() === 'x';
+        const labelText = taskMatch[2];
+        const thisTaskIdx = taskCursor++;
+        return (
+          <li key={li} className="list-none -ms-5 flex items-start gap-2">
+            <button
+              type="button"
+              disabled={!onToggleTask || isReadOnly}
+              onClick={() => onToggleTask?.(thisTaskIdx)}
+              aria-label={`${checked ? 'Uncheck' : 'Check'} task: ${labelText}`}
+              aria-pressed={checked}
+              className="mt-1 text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 disabled:opacity-60 disabled:cursor-not-allowed shrink-0"
+            >
+              {checked ? (
+                <CheckSquare className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              ) : (
+                <Square className="w-4 h-4" />
+              )}
+            </button>
+            <span
+              className={
+                checked
+                  ? 'line-through text-slate-400 dark:text-slate-500'
+                  : undefined
+              }
+            >
+              {renderInline(labelText)}
+            </span>
+          </li>
+        );
+      }
+      return <li key={li}>{renderInline(item)}</li>;
+    });
 
   return (
     <div dir={dir} className="space-y-3 text-slate-800 dark:text-slate-200 leading-relaxed">
@@ -178,24 +229,87 @@ export const AstRenderer: React.FC<AstRendererProps> = ({
                 {renderInline(block.text)}
               </h1>
             );
-          case 'h2':
+          case 'h2': {
+            const isSecDone = completedSectionSet.has(
+              block.text.trim().toLowerCase()
+            );
             return (
               <h2
                 key={idx}
-                className="text-lg font-semibold text-slate-900 dark:text-white pt-3 pb-1 border-b border-slate-200 dark:border-slate-800"
+                className="text-lg font-semibold text-slate-900 dark:text-white pt-3 pb-1 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2"
               >
-                {renderInline(block.text)}
+                <span>{renderInline(block.text)}</span>
+                {onToggleSectionComplete && (
+                  <button
+                    type="button"
+                    onClick={() => onToggleSectionComplete(block.text.trim())}
+                    title={
+                      isSecDone
+                        ? 'Mark sub-section incomplete'
+                        : 'Mark sub-section completed'
+                    }
+                    aria-label={`${
+                      isSecDone ? 'Mark incomplete' : 'Mark completed'
+                    }: ${block.text}`}
+                    aria-pressed={isSecDone}
+                    className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded transition-colors shrink-0 ${
+                      isSecDone
+                        ? 'text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
+                        : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                    }`}
+                  >
+                    {isSecDone ? (
+                      <CheckSquare className="w-3.5 h-3.5" />
+                    ) : (
+                      <Square className="w-3.5 h-3.5" />
+                    )}
+                    <span className="hidden sm:inline">
+                      {isSecDone ? 'Done' : 'Check'}
+                    </span>
+                  </button>
+                )}
               </h2>
             );
-          case 'h3':
+          }
+          case 'h3': {
+            const isSecDone = completedSectionSet.has(
+              block.text.trim().toLowerCase()
+            );
             return (
               <h3
                 key={idx}
-                className="text-base font-semibold text-slate-800 dark:text-slate-100 pt-2"
+                className="text-base font-semibold text-slate-800 dark:text-slate-100 pt-2 flex items-center justify-between gap-2"
               >
-                {renderInline(block.text)}
+                <span>{renderInline(block.text)}</span>
+                {onToggleSectionComplete && (
+                  <button
+                    type="button"
+                    onClick={() => onToggleSectionComplete(block.text.trim())}
+                    title={
+                      isSecDone
+                        ? 'Mark sub-section incomplete'
+                        : 'Mark sub-section completed'
+                    }
+                    aria-label={`${
+                      isSecDone ? 'Mark incomplete' : 'Mark completed'
+                    }: ${block.text}`}
+                    aria-pressed={isSecDone}
+                    className={`inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded transition-colors shrink-0 ${
+                      isSecDone
+                        ? 'text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
+                        : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+                    }`}
+                  >
+                    {isSecDone ? (
+                      <CheckSquare className="w-3.5 h-3.5" />
+                    ) : (
+                      <Square className="w-3.5 h-3.5" />
+                    )}
+                  </button>
+                )}
               </h3>
             );
+          }
           case 'paragraph':
             return (
               <p key={idx} className="text-[15px] leading-7 text-slate-700 dark:text-slate-300">
@@ -218,9 +332,7 @@ export const AstRenderer: React.FC<AstRendererProps> = ({
                   key={idx}
                   className="list-decimal ps-6 space-y-1.5 text-[15px] text-slate-700 dark:text-slate-300"
                 >
-                  {block.items.map((item, li) => (
-                    <li key={li}>{renderInline(item)}</li>
-                  ))}
+                  {renderListItems(block.items)}
                 </ol>
               );
             }
@@ -229,9 +341,7 @@ export const AstRenderer: React.FC<AstRendererProps> = ({
                 key={idx}
                 className="list-disc ps-6 space-y-1.5 text-[15px] text-slate-700 dark:text-slate-300"
               >
-                {block.items.map((item, li) => (
-                  <li key={li}>{renderInline(item)}</li>
-                ))}
+                {renderListItems(block.items)}
               </ul>
             );
           case 'code':

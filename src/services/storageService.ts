@@ -2,6 +2,14 @@ import { SupportedLangCode } from '../i18n/languages';
 
 export type NoteAnnotationColor = 'amber' | 'sky' | 'emerald';
 
+export type NoteCardColor =
+  | 'none'
+  | 'blue'
+  | 'emerald'
+  | 'amber'
+  | 'rose'
+  | 'violet';
+
 export interface NoteAnnotation {
   id: string;
   lineNumber: number;
@@ -28,6 +36,9 @@ export interface NoteRecord {
   tags: string[];
   archived?: boolean;
   pinned?: boolean;
+  color?: NoteCardColor;
+  completed?: boolean;
+  completedSections?: string[];
   snapshots?: NoteSnapshot[];
   annotations?: NoteAnnotation[];
 }
@@ -42,6 +53,12 @@ export const STARTER_NOTES: NoteRecord[] = [
     language: 'en',
     updatedAt: Date.now() - 3600 * 1000 * 5,
     tags: ['Python', 'Algorithms'],
+    color: 'blue',
+    completedSections: [
+      'Problem Statement',
+      'Iterative Python Implementation',
+      'Complexity Matrix',
+    ],
     content: `Binary Search & Asymptotic Bounds
 *********************************
 
@@ -79,6 +96,11 @@ Complexity Matrix
     language: 'en',
     updatedAt: Date.now() - 3600 * 1000 * 2,
     tags: ['Rust', 'COBOL/Assembly', 'SQL'],
+    color: 'emerald',
+    completedSections: [
+      'Borrow Checker & Memory Safety',
+      'x86-64 Register Loop',
+    ],
     content: `Systems Lab: Rust Ownership & x86 Assembly
 ******************************************
 
@@ -115,6 +137,8 @@ Relational Telemetry Query (SQL)
     language: 'ar',
     updatedAt: Date.now() - 3600 * 1000,
     tags: ['TypeScript', 'Graphs'],
+    color: 'violet',
+    completedSections: ['فكرة الخوارزمية'],
     content: `خوارزمية ديكسترا لأقصر مسار
 ***************************
 

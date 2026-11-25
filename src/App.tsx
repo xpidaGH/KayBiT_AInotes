@@ -5,7 +5,9 @@ import {
   ArrowUpDown,
   BookOpen,
   Camera,
+  CheckCircle2,
   ChevronDown,
+  Circle,
   ClipboardList,
   Code2,
   Copy,
@@ -22,6 +24,7 @@ import {
   Maximize2,
   Minimize2,
   Moon,
+  Palette,
   Pause,
   Pin,
   Play,
@@ -51,11 +54,19 @@ import {
   inferSourceType,
   loadNotes,
   NoteAnnotation,
+  NoteCardColor,
   NoteRecord,
   NoteSnapshot,
   readFileAsText,
   saveNotes,
 } from './services/storageService';
+import {
+  getNoteColorStyle,
+  getNoteCompletionStatus,
+  getProgressBarWidthClass,
+  NOTE_COLOR_OPTIONS,
+  toggleTaskCheckboxInContent,
+} from './services/noteMetadata';
 import {
   exportConsolidatedStudyGuidePdf,
   exportNoteAsMarkdown,
@@ -184,6 +195,8 @@ export default function App() {
     return saved && VALID_SORT_OPTIONS.includes(saved) ? saved : 'updated-desc';
   });
   const [selectedTagFilter, setSelectedTagFilter] = useState<string | null>(null);
+  const [selectedColorFilter, setSelectedColorFilter] = useState<NoteCardColor | null>(null);
+  const [colorPickerNoteId, setColorPickerNoteId] = useState<string | null>(null);
   const [tagInput, setTagInput] = useState('');
   const [shortcuts, setShortcuts] = useState<ShortcutItem[]>(() => loadKeybindings());
 
@@ -368,12 +381,33 @@ export default function App() {
       .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
   }, [viewNotes]);
 
+  const colorCounts = useMemo(() => {
+    const counts = new Map<NoteCardColor, number>();
+    for (const note of viewNotes) {
+      const c = note.color ?? 'none';
+      if (c !== 'none') {
+        counts.set(c, (counts.get(c) ?? 0) + 1);
+      }
+    }
+    return counts;
+  }, [viewNotes]);
+
   const filteredNotes = useMemo(() => {
-    if (!selectedTagFilter) return viewNotes;
-    return viewNotes.filter((n) =>
-      (n.tags ?? []).some((t) => t.toLowerCase() === selectedTagFilter.toLowerCase())
-    );
-  }, [viewNotes, selectedTagFilter]);
+    return viewNotes.filter((n) => {
+      if (
+        selectedTagFilter &&
+        !(n.tags ?? []).some(
+          (t) => t.toLowerCase() === selectedTagFilter.toLowerCase()
+        )
+      ) {
+        return false;
+      }
+      if (selectedColorFilter && (n.color ?? 'none') !== selectedColorFilter) {
+        return false;
+      }
+      return true;
+    });
+  }, [viewNotes, selectedTagFilter, selectedColorFilter]);
 
   const editorStats = useMemo(() => {
     const text = activeNote?.content ?? '';
@@ -1016,6 +1050,46 @@ export default function App() {
     );
   };
 
+  const handleSetNoteColor = (id: string, color: NoteCardColor) => {
+    setNotes((prev) =>
+      prev.map((n) =>
+        n.id === id ? { ...n, color: color === 'none' ? undefined : color } : n
+      )
+    );
+    setColorPickerNoteId(null);
+  };
+
+  const handleToggleNoteCompleted = (id: string) => {
+    setNotes((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, completed: !n.completed } : n))
+    );
+  };
+
+  const handleToggleSectionComplete = (sectionTitle: string) => {
+    if (!activeNote) return;
+    const normalizedTarget = sectionTitle.trim().toLowerCase();
+    const current = activeNote.completedSections ?? [];
+    const exists = current.some(
+      (item) => item.trim().toLowerCase() === normalizedTarget
+    );
+    const nextSections = exists
+      ? current.filter((item) => item.trim().toLowerCase() !== normalizedTarget)
+      : [...current, sectionTitle.trim()];
+    setNotes((prev) =>
+      prev.map((n) =>
+        n.id === activeNote.id ? { ...n, completedSections: nextSections } : n
+      )
+    );
+  };
+
+  const handleToggleTaskInActiveNote = (taskIndex: number) => {
+    if (!activeNote || isReadOnly) return;
+    const nextContent = toggleTaskCheckboxInContent(activeNote.content, taskIndex);
+    if (nextContent !== activeNote.content) {
+      handleUpdateActiveNote({ content: nextContent });
+    }
+  };
+
   const handleToggleArchiveNote = (id: string) => {
     const target = notes.find((n) => n.id === id);
     if (!target) return;
@@ -1036,6 +1110,8 @@ export default function App() {
   const handleSwitchArchiveFilter = (nextView: 'active' | 'archived') => {
     setArchiveFilter(nextView);
     setSelectedTagFilter(null);
+    setSelectedColorFilter(null);
+    setColorPickerNoteId(null);
     const firstMatch = notes.find((n) =>
       nextView === 'archived' ? Boolean(n.archived) : !n.archived
     );
@@ -1526,6 +1602,56 @@ export default function App() {
                 </select>
               </div>
 
+              {/* Color Category Filter Strip */}
+              <div className="px-3.5 py-2 border-b border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/30 flex flex-wrap items-center justify-between gap-2">
+                <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 inline-flex items-center gap-1 whitespace-nowrap shrink-0">
+                  <Palette className="w-3 h-3" />
+                  Color
+                </span>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedColorFilter(null)}
+                    className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors whitespace-nowrap shrink-0 ${
+                      selectedColorFilter === null
+                        ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    All
+                  </button>
+                  {NOTE_COLOR_OPTIONS.filter((c) => c.id !== 'none').map((opt) => {
+                    const count = colorCounts.get(opt.id) ?? 0;
+                    const isColorActive = selectedColorFilter === opt.id;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() =>
+                          setSelectedColorFilter((prev) =>
+                            prev === opt.id ? null : opt.id
+                          )
+                        }
+                        title={`Filter by ${opt.label} (${count})`}
+                        aria-label={`Filter by ${opt.label} color (${count})`}
+                        aria-pressed={isColorActive}
+                        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] transition-colors tabular-nums ${
+                          isColorActive
+                            ? 'bg-white dark:bg-slate-800 ring-1 ring-slate-400 dark:ring-slate-500 text-slate-900 dark:text-white font-medium'
+                            : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400'
+                        }`}
+                      >
+                        <span
+                          aria-hidden="true"
+                          className={`w-2.5 h-2.5 rounded-full ${opt.swatchClass}`}
+                        />
+                        {count > 0 && <span>{count}</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               {/* Clickable Tag Filter Bar */}
               {allTags.length > 0 && (
                 <div className="px-3.5 py-2.5 border-b border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950/50 space-y-2">
@@ -1582,20 +1708,27 @@ export default function App() {
                 {filteredNotes.length === 0 ? (
                   <div className="p-5 text-center space-y-2.5">
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      {selectedTagFilter
-                        ? `No ${archiveFilter} notes labeled "${selectedTagFilter}".`
+                      {selectedTagFilter || selectedColorFilter
+                        ? `No ${archiveFilter} notes match the active ${
+                            selectedColorFilter ? `${getNoteColorStyle(selectedColorFilter).label.toLowerCase()} color` : ''
+                          }${selectedColorFilter && selectedTagFilter ? ' and ' : ''}${
+                            selectedTagFilter ? `"${selectedTagFilter}" label` : ''
+                          } filter.`
                         : archiveFilter === 'archived'
                         ? 'No archived notes yet. Move finished notes to Archive to keep your workspace focused.'
                         : 'All notes are currently archived.'}
                     </p>
                     <div className="flex flex-wrap justify-center gap-2">
-                      {selectedTagFilter ? (
+                      {selectedTagFilter || selectedColorFilter ? (
                         <button
                           type="button"
-                          onClick={() => setSelectedTagFilter(null)}
+                          onClick={() => {
+                            setSelectedTagFilter(null);
+                            setSelectedColorFilter(null);
+                          }}
                           className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800"
                         >
-                          Show all {archiveFilter}
+                          Clear filters
                         </button>
                       ) : archiveFilter === 'active' ? (
                         <>
@@ -1631,13 +1764,22 @@ export default function App() {
                   filteredNotes.map((n) => {
                     const isActive = n.id === activeNote?.id;
                     const noteTags = n.tags ?? [];
+                    const colorStyle = getNoteColorStyle(n.color);
+                    const hasCustomColor = Boolean(n.color && n.color !== 'none');
+                    const isColorPickerOpen = colorPickerNoteId === n.id;
+                    const completion = getNoteCompletionStatus(n);
+                    const barWidthClass = getProgressBarWidthClass(
+                      completion.percent
+                    );
+                    const isFullyDone = completion.percent === 100;
+
                     return (
                       <div
                         key={n.id}
-                        className={`group px-4 py-3 transition-colors space-y-1.5 ${
+                        className={`group px-4 py-3 transition-colors space-y-2 ${
                           isActive
-                            ? 'bg-blue-50/70 dark:bg-blue-950/30'
-                            : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                            ? colorStyle.cardActiveClass
+                            : colorStyle.cardIdleClass
                         }`}
                       >
                         <div className="flex items-start justify-between gap-2">
@@ -1647,6 +1789,13 @@ export default function App() {
                             className="flex-1 text-start min-w-0"
                           >
                             <div className="text-xs font-semibold text-slate-900 dark:text-white truncate flex items-center gap-1.5">
+                              {hasCustomColor && (
+                                <span
+                                  title={`Color category: ${colorStyle.label}`}
+                                  aria-label={`Color category: ${colorStyle.label}`}
+                                  className={`w-2.5 h-2.5 rounded-full shrink-0 ${colorStyle.swatchClass}`}
+                                />
+                              )}
                               {n.pinned && (
                                 <Pin
                                   aria-hidden="true"
@@ -1664,6 +1813,14 @@ export default function App() {
                                   <span aria-hidden="true">·</span>
                                 </>
                               )}
+                              {hasCustomColor && (
+                                <>
+                                  <span className={`font-medium ${colorStyle.labelTextClass}`}>
+                                    {colorStyle.label}
+                                  </span>
+                                  <span aria-hidden="true">·</span>
+                                </>
+                              )}
                               <span className="font-mono uppercase">{n.sourceType}</span>
                               <span aria-hidden="true">·</span>
                               <span>{n.language}</span>
@@ -1671,11 +1828,29 @@ export default function App() {
                           </button>
                           <div
                             className={`flex items-center gap-0.5 shrink-0 transition-opacity ${
-                              isActive || n.pinned
+                              isActive || n.pinned || isColorPickerOpen
                                 ? 'opacity-100'
                                 : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100'
                             }`}
                           >
+                            <button
+                              type="button"
+                              aria-expanded={isColorPickerOpen}
+                              onClick={() =>
+                                setColorPickerNoteId((prev) =>
+                                  prev === n.id ? null : n.id
+                                )
+                              }
+                              title={`Color-code note (${colorStyle.label})`}
+                              aria-label={`Color-code ${n.title}`}
+                              className={`p-1 rounded transition-colors ${
+                                isColorPickerOpen || hasCustomColor
+                                  ? colorStyle.labelTextClass
+                                  : 'text-slate-400 hover:text-blue-600 dark:hover:text-blue-400'
+                              }`}
+                            >
+                              <Palette className="w-3.5 h-3.5" />
+                            </button>
                             <button
                               type="button"
                               aria-pressed={Boolean(n.pinned)}
@@ -1735,6 +1910,106 @@ export default function App() {
                                 <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             )}
+                          </div>
+                        </div>
+
+                        {/* Inline Color Picker Row */}
+                        {isColorPickerOpen && (
+                          <div
+                            role="group"
+                            aria-label={`Choose color for ${n.title}`}
+                            className="flex flex-wrap items-center gap-1.5 px-2 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
+                          >
+                            {NOTE_COLOR_OPTIONS.map((opt) => {
+                              const selected = (n.color ?? 'none') === opt.id;
+                              return (
+                                <button
+                                  key={opt.id}
+                                  type="button"
+                                  onClick={() => handleSetNoteColor(n.id, opt.id)}
+                                  aria-pressed={selected}
+                                  title={opt.label}
+                                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                                    selected
+                                      ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900'
+                                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                                  }`}
+                                >
+                                  <span
+                                    aria-hidden="true"
+                                    className={`w-2 h-2 rounded-full ${opt.swatchClass}`}
+                                  />
+                                  {opt.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {/* Completion Status & Subtle Progress Bar */}
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between gap-2 text-[11px] tabular-nums">
+                            {completion.mode === 'note' ? (
+                              <button
+                                type="button"
+                                onClick={() => handleToggleNoteCompleted(n.id)}
+                                title={
+                                  isFullyDone
+                                    ? 'Mark note in progress'
+                                    : 'Mark note completed'
+                                }
+                                className={`inline-flex items-center gap-1 font-medium transition-colors ${
+                                  isFullyDone
+                                    ? 'text-emerald-700 dark:text-emerald-400'
+                                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                                }`}
+                              >
+                                {isFullyDone ? (
+                                  <CheckCircle2 className="w-3 h-3 shrink-0" />
+                                ) : (
+                                  <Circle className="w-3 h-3 shrink-0" />
+                                )}
+                                <span>{completion.label}</span>
+                              </button>
+                            ) : (
+                              <span
+                                className={`inline-flex items-center gap-1 font-medium ${
+                                  isFullyDone
+                                    ? 'text-emerald-700 dark:text-emerald-400'
+                                    : 'text-slate-500 dark:text-slate-400'
+                                }`}
+                              >
+                                {isFullyDone ? (
+                                  <CheckCircle2 className="w-3 h-3 shrink-0" />
+                                ) : (
+                                  <Circle className="w-3 h-3 shrink-0" />
+                                )}
+                                <span>{completion.label}</span>
+                              </span>
+                            )}
+                            <span
+                              className={
+                                isFullyDone
+                                  ? 'font-medium text-emerald-700 dark:text-emerald-400'
+                                  : 'text-slate-400 dark:text-slate-500'
+                              }
+                            >
+                              {completion.percent}%
+                            </span>
+                          </div>
+                          <div
+                            role="progressbar"
+                            aria-label={`Completion progress for ${n.title}`}
+                            aria-valuemin={0}
+                            aria-valuemax={100}
+                            aria-valuenow={completion.percent}
+                            className="h-1 w-full rounded-full bg-slate-200/80 dark:bg-slate-800 overflow-hidden"
+                          >
+                            <div
+                              className={`h-full rounded-full transition-all duration-200 ${barWidthClass} ${
+                                isFullyDone ? 'bg-emerald-500' : 'bg-blue-500'
+                              }`}
+                            />
                           </div>
                         </div>
 
@@ -2436,6 +2711,10 @@ export default function App() {
                             onExplainCode={handleExplainCodeFromPreview}
                             annotations={activeNote.annotations ?? []}
                             onSelectAnnotation={(id) => setFocusedAnnotationId(id)}
+                            completedSections={activeNote.completedSections ?? []}
+                            onToggleSectionComplete={handleToggleSectionComplete}
+                            onToggleTask={handleToggleTaskInActiveNote}
+                            isReadOnly={isReadOnly}
                           />
                         </div>
                       </div>
@@ -2532,6 +2811,10 @@ export default function App() {
                 dir={getLanguageMeta(activeNote.language).dir}
                 onExplainCode={handleExplainCodeFromPreview}
                 annotations={activeNote.annotations ?? []}
+                completedSections={activeNote.completedSections ?? []}
+                onToggleSectionComplete={handleToggleSectionComplete}
+                onToggleTask={handleToggleTaskInActiveNote}
+                isReadOnly={isReadOnly}
               />
             </div>
             <div className="lg:col-span-5">
